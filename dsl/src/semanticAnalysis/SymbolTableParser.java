@@ -28,6 +28,7 @@ import parser.AST.*;
 // CHECKSTYLE:ON: AvoidStarImport
 import runtime.IEvironment;
 import semanticAnalysis.types.AggregateType;
+import semanticAnalysis.types.TypeBinder;
 
 // TODO: enable dynamic loading of data types (for better testability)
 /** Creates a symbol table for an AST node for a DSL program */
@@ -165,11 +166,15 @@ public class SymbolTableParser implements AstVisitor<Void> {
     public Void visit(Node node) {
         switch (node.type) {
             case Program:
-                // First, bind all object definitions / variable assignments to enable object
+                // bind all type definitions
+                TypeBinder tb = new TypeBinder();
+                tb.bindTypes(symbolTable, node, errorStringBuilder);
+
+                // bind all object definitions / variable assignments to enable object
                 // references before
                 // definition
                 VariableBinder vb = new VariableBinder();
-                vb.bindVariables(symbolTable, currentScope(), node, errorStringBuilder);
+                vb.bindVariables(symbolTable, globalScope(), node, errorStringBuilder);
 
                 visitChildren(node);
 
@@ -229,6 +234,49 @@ public class SymbolTableParser implements AstVisitor<Void> {
     }
 
     @Override
+    public Void visit(GameObjectDefinitionNode node) {
+        // resolve datatype of definition
+        var typeName = node.getIdName();
+        var typeSymbol = this.globalScope().resolve(typeName);
+        if (typeSymbol.equals(Symbol.NULL) || typeSymbol == null) {
+            errorStringBuilder.append("Could not resolve type " + typeName);
+        } else {
+            scopeStack.push((AggregateType) typeSymbol);
+            for (var componentDef : node.getComponentDefinitionNodes()) {
+                componentDef.accept(this);
+            }
+            scopeStack.pop();
+        }
+        return null;
+    }
+
+    // TODO: Symbols for members?
+    @Override
+    public Void visit(ComponentDefinitionNode node) {
+        // push datatype of component
+        // resolve in current scope, which will be datatype of game object definition
+        var memberSymbol = currentScope().resolve(node.getIdName());
+        if (memberSymbol == Symbol.NULL) {
+            errorStringBuilder.append("Could not resolve Component with name " + node.getIdName());
+        } else {
+            var typeSymbol = memberSymbol.getDataType();
+            // TODO: errorhandling
+            if (typeSymbol == Symbol.NULL || typeSymbol == null) {
+                errorStringBuilder.append("Could not resolve type " + "TODO");
+            } else {
+                scopeStack.push((AggregateType) typeSymbol);
+
+                for (var propertyDef : node.getPropertyDefinitionNodes()) {
+                    propertyDef.accept(this);
+                }
+                scopeStack.pop();
+            }
+        }
+
+        return null;
+    }
+
+    @Override
     public Void visit(PropertyDefNode node) {
         var propertyIdName = node.getIdName();
 
@@ -240,7 +288,8 @@ public class SymbolTableParser implements AstVisitor<Void> {
         } else {
             // link the propertySymbol in the dataType to the astNode of this concrete property
             // definition
-            this.symbolTable.addSymbolNodeRelation(propertySymbol, node.getIdNode());
+            // this.symbolTable.addSymbolNodeRelation(propertySymbol, node.getIdNode());
+            this.symbolTable.addSymbolNodeRelation(propertySymbol, node);
         }
 
         var stmtNode = node.getStmtNode();
