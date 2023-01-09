@@ -6,7 +6,7 @@ import semanticAnalysis.types.AggregateType;
 // multiple inheritance
 //  and no need to implement either Value or MemorySpace as an interface..
 public class AggregateValue extends Value {
-    private MemorySpace ms;
+    protected MemorySpace ms;
 
     public MemorySpace getMemorySpace() {
         return ms;

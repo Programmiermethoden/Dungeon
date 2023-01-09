@@ -5,9 +5,12 @@ import graph.Graph;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
+
+import helpers.Helpers;
 import org.junit.Assert;
 import org.junit.Test;
 import runtime.MemorySpace;
+import runtime.Value;
 import semanticAnalysis.Scope;
 
 // TODO: handle context for construction of components and passing
@@ -31,7 +34,8 @@ public class TestTypeInstantiator {
 
         int memberCounter = 0;
         for (var member : type.getSymbols()) {
-            ms.bindFromSymbol(member);
+            Helpers.bindDefaultValueInMemorySpace(member, ms);
+
             if (member.getDataType().equals(BuiltInType.intType)) {
                 setValues.put(member.getName(), memberCounter);
                 ms.resolve(member.getName()).setInternalValue(memberCounter);
@@ -86,7 +90,7 @@ public class TestTypeInstantiator {
 
         int memberCounter = 0;
         for (var member : type.getSymbols()) {
-            ms.bindFromSymbol(member);
+            Helpers.bindDefaultValueInMemorySpace(member, ms);
             if (member.getDataType().equals(BuiltInType.intType)) {
                 setValues.put(member.getName(), memberCounter);
                 ms.resolve(member.getName()).setInternalValue(memberCounter);

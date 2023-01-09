@@ -167,7 +167,6 @@ public class DSLInterpreter implements AstVisitor<Object> {
      * @param environment The environment to bind the functions and objects from.
      */
     public void initializeRuntime(IEvironment environment) {
-
         this.environment = new RuntimeEnvironment(environment);
 
         // bind all function definition and object definition symbols to objects
@@ -176,7 +175,8 @@ public class DSLInterpreter implements AstVisitor<Object> {
             if (symbol instanceof ICallable) {
                 var callableType = ((ICallable) symbol).getCallableType();
                 if (callableType == ICallable.Type.Native) {
-                    this.globalSpace.bindFromSymbol(symbol);
+                    //this.globalSpace.bindFromSymbol(symbol);
+                    bindFromSymbol(symbol, memoryStack.peek());
                 } else if (callableType == ICallable.Type.UserDefined) {
                     // TODO: if userDefined -> reference AST -> how to?
                     //  subclass of value? -> do it by symbol-reference
@@ -184,8 +184,38 @@ public class DSLInterpreter implements AstVisitor<Object> {
             }
             // bind all global definitions
             else {
-                this.globalSpace.bindFromSymbol(symbol);
+                //this.globalSpace.bindFromSymbol(symbol);
+                bindFromSymbol(symbol, memoryStack.peek());
             }
+        }
+    }
+
+    private boolean bindFromSymbol(Symbol symbol, MemorySpace ms) {
+        if (!(symbol instanceof IType)) {
+            var value = createDefaultValue(symbol.getDataType(), symbol.getIdx());
+            ms.bindValue(symbol.getName(), value);
+            return true;
+        }
+        return false;
+    }
+
+    private Value createDefaultValue(IType type, int symbolIdx)  {
+        if (type.getTypeKind().equals(IType.Kind.Basic)) {
+            Object internalValue = Value.getDefaultValue(type);
+            return new Value(type, internalValue, symbolIdx);
+        } else {
+            var topMostMs = this.memoryStack.peek();
+            AggregateValue value = new AggregateValue((AggregateType) type, symbolIdx, topMostMs);
+            // TODO: push value?
+            this.memoryStack.push(value.getMemorySpace());
+            for (var member : ((AggregateType) type).getSymbols()) {
+                //value.getMemorySpace().bindFromSymbol(member);
+                //value.getMemorySpace().bindFromSymbol(member);
+                bindFromSymbol(member, memoryStack.peek());
+            }
+            // TODO: pop value?
+            this.memoryStack.pop();
+            return value;
         }
     }
 
@@ -236,6 +266,27 @@ public class DSLInterpreter implements AstVisitor<Object> {
         return this.questConfigBuilder.build();
     }
 
+    // this is the evaluation side of things
+    @Override
+    public Object visit(GameObjectDefinitionNode node) {
+        var typeWithDefaults = this.environment.lookupTypeWithDefaults(node.getIdName());
+
+        // TODO: create instance of typeWithDefaults
+        //  should this be a java instance or an AggregateValue?
+        //  .. later during runtime, maybe we need to access components & Entities
+        //  in a function.. so this should probably create a java object and encapsulate it
+        //  in a dsl-object (in order to read and set values)
+
+        // TODO: specify, at which point the game object or entity is passed to the dungeon..
+        //  The quest-config is the single point of entry, so every thing configured in this
+        //  object should probably be ready to go
+
+        // is it correct to say, that whenever a typedefinition is used as a value in an expression,
+        // that it should be instanced? ..if it is part of the dungeon framework, i think so, yes
+
+        return null;
+    }
+
     @Override
     public Object visit(ObjectDefNode node) {
         // resolve name of object in memory space
@@ -249,15 +300,17 @@ public class DSLInterpreter implements AstVisitor<Object> {
 
         memoryStack.push(ms);
 
+        // TODO: is this even correct? i don't think so..
         // bind new value for every property
-        for (var propDefNode : node.getPropertyDefinitions()) {
+        /*for (var propDefNode : node.getPropertyDefinitions()) {
             var propDefSymbol = this.symbolTable().getSymbolsForAstNode(propDefNode).get(0);
             if (propDefSymbol == Symbol.NULL) {
                 // TODO: handle
             } else {
-                ms.bindFromSymbol(propDefSymbol);
+                bindFromSymbol(propDefSymbol, memoryStack.peek());
+                //ms.bindFromSymbol(propDefSymbol);
             }
-        }
+        }*/
 
         // accept every propertyDefinition
         for (var propDefNode : node.getPropertyDefinitions()) {
@@ -320,7 +373,7 @@ public class DSLInterpreter implements AstVisitor<Object> {
         var symbol = this.symbolTable().getSymbolsForAstNode(node).get(0);
         var creationASTNode = this.symbolTable().getCreationAstNode(symbol);
 
-        assert creationASTNode.type == Node.Type.DotDefinition;
+        //assert creationASTNode.type == Node.Type.DotDefinition;
         return creationASTNode.accept(this);
     }
 
@@ -352,13 +405,16 @@ public class DSLInterpreter implements AstVisitor<Object> {
     public Object executeUserDefinedFunction(FunctionSymbol symbol, List<Node> parameterNodes) {
         // push new memorySpace and parameters on spaceStack
         var functionMemSpace = new MemorySpace(memoryStack.peek());
+        this.memoryStack.push(functionMemSpace);
+
         var funcAsScope = (ScopedSymbol) symbol;
 
         // TODO: push parameter for return value
         var parameterSymbols = funcAsScope.getSymbols();
         for (int i = 0; i < parameterNodes.size(); i++) {
             var parameterSymbol = parameterSymbols.get(i);
-            functionMemSpace.bindFromSymbol(parameterSymbol);
+            //functionMemSpace.bindFromSymbol(parameterSymbol);
+            bindFromSymbol(parameterSymbol, memoryStack.peek());
 
             var paramValueNode = parameterNodes.get(i);
             var paramValue = paramValueNode.accept(this);
@@ -366,7 +422,7 @@ public class DSLInterpreter implements AstVisitor<Object> {
             setInternalValue(parameterSymbol.getName(), paramValue);
         }
 
-        memoryStack.push(functionMemSpace);
+        //memoryStack.push(functionMemSpace);
 
         // visit function AST
         var funcAstNode = this.symbolTable().getCreationAstNode(symbol);

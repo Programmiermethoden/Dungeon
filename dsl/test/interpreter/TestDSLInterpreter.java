@@ -9,6 +9,10 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
 import java.net.URL;
+
+import interpreter.mockECS.Entity;
+import interpreter.mockECS.TestComponent1;
+import interpreter.mockECS.TestComponent2;
 import org.junit.Ignore;
 import org.junit.Test;
 import parser.AST.Node;
@@ -206,7 +210,7 @@ public class TestDSLInterpreter {
     }
 
     @DSLType(name = "quest_config")
-    public record CustomQuestConfig(@DSLTypeMember Object gameObject) {}
+    public record CustomQuestConfig(@DSLTypeMember Entity entity) {}
 
     class TestEnvironment extends GameEnvironment {
         public TestEnvironment() {
@@ -233,22 +237,28 @@ public class TestDSLInterpreter {
     }
 
     @Test
-    @Ignore
     public void aggregateTypeInstancing() {
         String program =
                 """
-                graph g {
-                    A -- B
+                game_object my_obj {
+                    test_component1 {
+                        member1: 42,
+                        member2: 12
+                    },
+                    test_component2 {
+                        member1: "Hallo",
+                        member2: 123
+                    }
                 }
 
                 quest_config config {
-                    game_object: c
+                    entity: my_obj
                 }
                 """;
 
         TypeBuilder tb = new TypeBuilder();
-        var testCompType = tb.createTypeFromClass(new Scope(), TestComponent.class);
-        var otherCompType = tb.createTypeFromClass(new Scope(), OtherComponent.class);
+        var testCompType = tb.createTypeFromClass(new Scope(), TestComponent1.class);
+        var otherCompType = tb.createTypeFromClass(new Scope(), TestComponent2.class);
 
         var env = new TestEnvironment();
         env.loadTypes(new Symbol[] {testCompType, otherCompType});
@@ -261,8 +271,9 @@ public class TestDSLInterpreter {
         DSLInterpreter interpreter = new DSLInterpreter();
         interpreter.initializeRuntime(env);
 
-        // var questConfig = interpreter.generateQuestConfig(ast);
-        // var rtEnv = interpreter.getRuntimeEnvironment();
+        interpreter.generateQuestConfig(ast);
+        var rtEnv = interpreter.getRuntimeEnvironment();
+        var globalMs = interpreter.getGlobalMemorySpace();
     }
 
     @Test
@@ -295,7 +306,7 @@ public class TestDSLInterpreter {
         // extract memory space corresponding to the game object
         var memSpace = interpreter.getGlobalMemorySpace();
 
-        // TODO: this does not work, because the gmae object definition
+        // TODO: this does not work, because the game object definition
         //  is currently not instantiated
         var obj = memSpace.resolve("my_obj");
         assertNotEquals(Value.NONE, obj);
